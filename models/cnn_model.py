@@ -19,40 +19,38 @@ class StockCNN:
         x = inputs
         # 按照文献要求构建每个构建块
         for i, block in enumerate(self.config["blocks"]):
-            # 卷积层
+            # 卷积层：kernel_size=3, padding=1（论文要求）
             x = layers.Conv2D(
                 filters=block["filters"],
-                kernel_size=block["kernel"],  # 5×3滤波器
-                padding='valid',  # 无填充
+                kernel_size=3,  # 论文要求3x3卷积核
+                padding='same',  # 论文要求padding=1
                 kernel_initializer='glorot_uniform'  # Xavier初始化
             )(x)
             
-            # 添加批归一化层（减少内部协变量偏移）
+            # 添加批归一化层（论文要求）
             x = layers.BatchNormalization()(x)
             
-            # 泄漏ReLU激活函数：LeakyReLU(x) = max(0.01x, x)
+            # 泄漏ReLU激活函数（论文要求）
             x = layers.LeakyReLU(negative_slope=0.01)(x)
             
-            # 最大池化层：2×1滤波器（垂直2像素、水平1像素）
-            x = layers.MaxPooling2D(pool_size=block["pool"])(x)
+            # 最大池化层：2×2滤波器（论文要求）
+            x = layers.MaxPooling2D(pool_size=2)(x)
         
-        # 使用全局平均池化显著降低参数量，避免Flatten导致的超大向量
-        x = layers.GlobalAveragePooling2D()(x)
+        # 按照论文要求：Flatten → Linear → Dropout(0.5) → ReLU → Linear(2) → Softmax
+        x = layers.Flatten()(x)
         
-        # 根据不同天数设计更小的全连接层神经元数量（实用配置）
-        fc_neurons = self._get_fc_neurons(self.window_days)
+        # 第一个全连接层
         x = layers.Dense(
-            fc_neurons,
+            512,  # 论文示例通道数
             kernel_initializer='glorot_uniform'  # Xavier初始化
         )(x)
-        x = layers.BatchNormalization()(x)
-        x = layers.LeakyReLU(negative_slope=0.01)(x)
-        x = layers.Dropout(0.5)(x)
+        x = layers.Dropout(0.5)(x)  # 论文要求50% dropout
+        x = layers.ReLU()(x)  # 论文要求ReLU激活
         
-        # 输出层（单个神经元，sigmoid激活函数）
+        # 输出层：2个神经元（上下概率）
         outputs = layers.Dense(
-            1,
-            activation='sigmoid',
+            2,  # 论文要求输出2个类别
+            activation='softmax',  # 论文要求Softmax激活
             kernel_initializer='glorot_uniform'  # Xavier初始化
         )(x)
         
@@ -70,16 +68,16 @@ class StockCNN:
         }
         return practical_config.get(window_days, 128)
     
-    def compile_model(self, learning_rate=1e-15):
+    def compile_model(self, learning_rate=1e-5):
         """编译模型
         
         Args:
-            learning_rate: 初始学习率，默认为1e-15
+            learning_rate: 初始学习率，论文要求1e-5
         """
         if self.model is None:
             raise ValueError("请先调用build_model构建模型")
             
-        # 使用Adam优化器，初始学习率为1e-15
+        # 使用Adam优化器，初始学习率为1e-5（论文要求）
         optimizer = optimizers.Adam(learning_rate=learning_rate)
         
         # 使用Keras原生评估指标
@@ -94,10 +92,10 @@ class StockCNN:
             metrics.FalseNegatives(name='fn')   # 假负例
         ]
         
-        # 使用二元交叉熵损失函数：L(y, ŷ) = -y log(ŷ) - (1-y)log(1-ŷ)
+        # 使用交叉熵损失函数（论文要求）
         self.model.compile(
             optimizer=optimizer,
-            loss=losses.BinaryCrossentropy(from_logits=False),
+            loss=losses.SparseCategoricalCrossentropy(from_logits=False),
             metrics=metrics_list
         )
     

@@ -19,22 +19,58 @@ class StockDataProcessor:
         self.data_fraction = data_fraction
         
     def load_data(self):
-        """加载所有股票数据"""
+        """加载所有股票数据（论文要求：CRSP个股数据）"""
         data_dir = Path(DATA_PATH)
-        for file in data_dir.glob("*.csv"):
-            symbol = self._extract_symbol(file.name)
-            df = pd.read_csv(file, parse_dates=['Date'])
-            df = df.sort_values('Date').reset_index(drop=True)
+        
+        # 检查是否有CRSP个股数据文件
+        crsp_files = list(data_dir.glob("*CRSP*.csv")) + list(data_dir.glob("*crsp*.csv"))
+        
+        if crsp_files:
+            # 如果有CRSP数据，优先使用
+            print("发现CRSP个股数据文件，按论文要求加载...")
+            for file in crsp_files:
+                symbol = self._extract_symbol(file.name)
+                df = pd.read_csv(file, parse_dates=['Date'])
+                df = df.sort_values('Date').reset_index(drop=True)
+                
+                # 论文要求：训练期1993-2000，测试期2001-2019
+                df = self._filter_time_period(df)
+                
+                if self.data_fraction < 1.0:
+                    total_rows = len(df)
+                    use_rows = int(total_rows * self.data_fraction)
+                    print(f"数据量控制：{symbol} 原始 {total_rows} 行 → 使用 {use_rows} 行 ({self.data_fraction*100:.1f}%)")
+                    df = df.tail(use_rows)
+                
+                self.data[symbol] = self._clean_data(df)
+        else:
+            # 如果没有CRSP数据，使用现有的指数数据（临时方案）
+            print("未发现CRSP个股数据，使用现有指数数据（临时方案）...")
+            print("注意：论文要求使用CRSP个股数据，当前使用指数数据无法进行完整的投资组合分析")
             
-            # 如果设置了数据比例，只使用部分数据
-            if self.data_fraction < 1.0:
-                total_rows = len(df)
-                use_rows = int(total_rows * self.data_fraction)
-                print(f"数据量控制：{symbol} 原始 {total_rows} 行 → 使用 {use_rows} 行 ({self.data_fraction*100:.1f}%)")
-                df = df.tail(use_rows)  # 使用最近的数据
-            
-            self.data[symbol] = self._clean_data(df)
+            for file in data_dir.glob("*.csv"):
+                symbol = self._extract_symbol(file.name)
+                df = pd.read_csv(file, parse_dates=['Date'])
+                df = df.sort_values('Date').reset_index(drop=True)
+                
+                # 过滤时间区间
+                df = self._filter_time_period(df)
+                
+                if self.data_fraction < 1.0:
+                    total_rows = len(df)
+                    use_rows = int(total_rows * self.data_fraction)
+                    print(f"数据量控制：{symbol} 原始 {total_rows} 行 → 使用 {use_rows} 行 ({self.data_fraction*100:.1f}%)")
+                    df = df.tail(use_rows)
+                
+                self.data[symbol] = self._clean_data(df)
+        
         return self.data
+    
+    def _filter_time_period(self, df):
+        """过滤时间区间（论文要求：1993-2019）"""
+        # 确保数据覆盖论文要求的时间区间
+        df = df[(df['Date'] >= '1993-01-01') & (df['Date'] <= '2019-12-31')]
+        return df
     
     def _extract_symbol(self, filename):
         """从文件名提取股票代码"""
@@ -85,7 +121,11 @@ class StockDataProcessor:
         return df
     
     def create_sequences(self, df, window_days, prediction_days):
-        """创建时间序列和标签
+        """创建时间序列和标签（论文要求：监督期=持有期）
+        
+        Args:
+            window_days: 图像窗口长度（监督期）
+            prediction_days: 预测持有期（应与window_days相同）
         
         Returns:
             sequences: 窗口期数据列表
@@ -96,8 +136,13 @@ class StockDataProcessor:
         labels = []
         dates = []
         
+        # 论文要求：监督期=持有期，即window_days = prediction_days
+        if window_days != prediction_days:
+            print(f"警告：监督期({window_days})与持有期({prediction_days})不一致，调整为相同")
+            prediction_days = window_days
+        
         for i in range(len(df) - window_days - prediction_days + 1):
-            # 获取窗口期数据
+            # 获取窗口期数据（监督期）
             window_data = df.iloc[i:i+window_days].copy()
             
             # 检查当前价格和未来价格是否有效
@@ -108,9 +153,10 @@ class StockDataProcessor:
             if pd.isna(current_price) or pd.isna(future_price):
                 continue
                 
-            # 计算未来收益
+            # 计算未来持有期累计收益
             future_return = (future_price - current_price) / current_price
             
+            # 论文要求：二分类标签（未来持有期累计回报是否为正）
             sequences.append(window_data)
             labels.append(1 if future_return > 0 else 0)
             dates.append(df.iloc[i+window_days-1]['Date'])  # 添加序列最后一天的日期
