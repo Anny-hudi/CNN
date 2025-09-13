@@ -84,12 +84,34 @@ def run_experiment(symbol="SPX", window_days=20, test_mode=True):
     processor.load_data()
     
     # 获取序列数据
-    sequences, labels = processor.get_processed_data(symbol, window_days, window_days)
+    sequences, labels, dates = processor.get_processed_data(symbol, window_days, window_days)
     print(f"   共生成 {len(sequences)} 个样本")
     
     # 2. 生成OHLC图像
     print("2. 生成OHLC图像...")
     image_generator = OHLCImageGenerator(window_days)
+    # 基于训练集年份拟合归一化统计量
+    import pandas as pd
+    years = pd.to_datetime(dates).year
+    print(f"   数据年份范围: {years.min()}-{years.max()}")
+    
+    # 根据数据年份范围调整训练集筛选条件
+    if test_mode:
+        # 测试模式：使用前70%的数据作为训练集
+        train_size = int(len(sequences) * 0.7)
+        train_sequences = sequences[:train_size]
+        print(f"   测试模式：使用前{train_size}个序列作为训练集")
+    else:
+        # 生产模式：使用1993-2000年数据
+        train_mask = (years >= 1993) & (years <= 2000)
+        train_sequences = [seq for seq, is_train in zip(sequences, train_mask) if is_train]
+        print(f"   生产模式：训练集序列数量: {len(train_sequences)}")
+    
+    if len(train_sequences) > 0:
+        print("   正在计算训练集归一化统计量...")
+        image_generator.fit_normalizer(train_sequences)
+    else:
+        print("   警告：训练集为空，跳过归一化统计量计算")
     images = image_generator.generate_batch(sequences)
     print(f"   图像尺寸: {images.shape}")
     
@@ -114,7 +136,7 @@ def run_experiment(symbol="SPX", window_days=20, test_mode=True):
     # 4. 训练模型
     print("4. 训练模型...")
     trainer = ModelTrainer(model, window_days)
-    X_train, X_val, X_test, y_train, y_val, y_test = trainer.prepare_data(images, labels)
+    X_train, X_val, X_test, y_train, y_val, y_test = trainer.prepare_data(images, labels, dates)
     
     print(f"   训练集: {X_train.shape[0]} 样本")
     print(f"   验证集: {X_val.shape[0]} 样本") 

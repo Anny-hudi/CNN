@@ -91,10 +91,10 @@ class OHLCImageGenerator:
             x_base = i * 3  # 每天3像素宽
             
             # 按文献要求处理缺失数据
-            if hasattr(row, 'has_ohlc') and not row['has_ohlc']:
+            if 'has_ohlc' in row and not row['has_ohlc']:
                 # 完全缺失OHLC数据：对应像素列留空（全黑，像素值0）
                 continue
-            elif hasattr(row, 'has_high_low') and not row['has_high_low']:
+            elif 'has_high_low' in row and not row['has_high_low']:
                 # 缺失高低价数据：整列留空
                 continue
             

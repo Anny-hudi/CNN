@@ -33,10 +33,9 @@ MODEL_CONFIG = {
     },
     60: {
         "blocks": [
+            {"filters": 32, "kernel": (5, 3), "pool": (2, 1)},
             {"filters": 64, "kernel": (5, 3), "pool": (2, 1)},
-            {"filters": 128, "kernel": (5, 3), "pool": (2, 1)},
-            {"filters": 256, "kernel": (5, 3), "pool": (2, 1)},
-            {"filters": 512, "kernel": (5, 3), "pool": (2, 1)}
+            {"filters": 128, "kernel": (5, 3), "pool": (2, 1)}
         ]
     }
 }

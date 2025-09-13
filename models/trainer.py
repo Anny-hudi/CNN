@@ -32,9 +32,9 @@ class ModelTrainer:
         
         # 划分训练/测试集
         X_train = images[train_mask]
-        y_train = labels[train_mask]
+        y_train = np.array(labels)[train_mask]  # 转换为numpy数组
         X_test = images[test_mask]
-        y_test = labels[test_mask]
+        y_test = np.array(labels)[test_mask]    # 转换为numpy数组
         
         # 检查正负样本比例
         train_pos_ratio = np.mean(y_train == 1)
