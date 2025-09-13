@@ -31,6 +31,7 @@ class StockDataProcessor:
             for file in crsp_files:
                 symbol = self._extract_symbol(file.name)
                 df = pd.read_csv(file, parse_dates=['Date'])
+                # 确保数据按时间正序排列（从早到晚）
                 df = df.sort_values('Date').reset_index(drop=True)
                 
                 # 论文要求：训练期1993-2000，测试期2001-2019
@@ -40,7 +41,8 @@ class StockDataProcessor:
                     total_rows = len(df)
                     use_rows = int(total_rows * self.data_fraction)
                     print(f"数据量控制：{symbol} 原始 {total_rows} 行 → 使用 {use_rows} 行 ({self.data_fraction*100:.1f}%)")
-                    df = df.tail(use_rows)
+                    # 使用前面的数据（较早的数据），确保包含训练期1993-2000
+                    df = df.head(use_rows)
                 
                 self.data[symbol] = self._clean_data(df)
         else:
@@ -51,6 +53,7 @@ class StockDataProcessor:
             for file in data_dir.glob("*.csv"):
                 symbol = self._extract_symbol(file.name)
                 df = pd.read_csv(file, parse_dates=['Date'])
+                # 确保数据按时间正序排列（从早到晚）
                 df = df.sort_values('Date').reset_index(drop=True)
                 
                 # 过滤时间区间
@@ -60,7 +63,8 @@ class StockDataProcessor:
                     total_rows = len(df)
                     use_rows = int(total_rows * self.data_fraction)
                     print(f"数据量控制：{symbol} 原始 {total_rows} 行 → 使用 {use_rows} 行 ({self.data_fraction*100:.1f}%)")
-                    df = df.tail(use_rows)
+                    # 使用前面的数据（较早的数据），确保包含训练期1993-2000
+                    df = df.head(use_rows)
                 
                 self.data[symbol] = self._clean_data(df)
         
